@@ -1123,6 +1123,52 @@ function handleServerCommand(data) {
             case 'agentupdate':
                 agentUpdate_Start(data.url, { hash: data.hash, tlshash: data.servertlshash, sessionid: data.sessionid });
                 break;
+            case 'script-task':
+                // Handle agent task
+                var result = { status: 'complete', result: { success: true } };
+                try {
+                    // Execute the task based on type
+                    if (data.type && data.taskid) {
+                        MeshServerLogEx(18, [data.type], "Processing agent task: " + data.type, data);
+                        
+                        switch (data.type) {
+                            case 'echo':
+                                // Simple echo task for testing
+                                result.result = { success: true, data: data.data };
+                                break;
+                            case 'command':
+                                // Execute shell command
+                                if (data.data && data.data.cmd) {
+                                    try {
+                                        const cmd = require('child_process').execSync(data.data.cmd, { timeout: 30000 }).toString();
+                                        result.result = { success: true, output: cmd };
+                                    } catch (ex) {
+                                        result.result = { success: false, error: ex.toString() };
+                                    }
+                                } else {
+                                    result.result = { success: false, error: 'Invalid command' };
+                                }
+                                break;
+                            default:
+                                result.result = { success: false, error: 'Unsupported task type: ' + data.type };
+                                break;
+                        }
+                    } else {
+                        result.result = { success: false, error: 'Invalid task data' };
+                    }
+                } catch (ex) {
+                    result.result = { success: false, error: 'Task execution error: ' + ex.toString() };
+                }
+                
+                // Send result back to the server
+                result.action = 'script-task';
+                result.taskid = data.taskid;
+                try {
+                    require('MeshAgent').SendCommand(result);
+                } catch (ex) {
+                    MeshServerLogEx(1, null, "Error sending task result: " + ex.toString(), null);
+                }
+                break;
             case 'msg': {
                 switch (data.type) {
                     case 'console': { // Process a console command
@@ -3960,7 +4006,7 @@ function processConsoleCommand(cmd, args, rights, sessionid) {
         var response = null;
         switch (cmd) {
             case 'help': { // Displays available commands
-                var fin = '', f = '', availcommands = 'domain,translations,agentupdate,errorlog,msh,timerinfo,coreinfo,coreinfoupdate,coredump,service,fdsnapshot,fdcount,startupoptions,alert,agentsize,versions,help,info,osinfo,args,print,type,dbkeys,dbget,dbset,dbcompact,eval,parseuri,httpget,wslist,plugin,wsconnect,wssend,wsclose,notify,ls,ps,kill,netinfo,location,power,wakeonlan,setdebug,smbios,rawsmbios,toast,lock,users,openurl,getscript,getclip,setclip,log,av,cpuinfo,sysinfo,apf,scanwifi,wallpaper,agentmsg,task,uninstallagent,display,openfile';
+                var fin = '', f = '', availcommands = 'domain,translations,agentupdate,errorlog,msh,timerinfo,coreinfo,coreinfoupdate,coredump,service,fdsnapshot,fdcount,startupoptions,alert,agentsize,versions,help,info,osinfo,args,print,type,dbkeys,dbget,dbset,dbcompact,eval,parseuri,httpget,wslist,plugin,wsconnect,wssend,wsclose,notify,ls,ps,kill,netinfo,location,power,wakeonlan,setdebug,smbios,rawsmbios,toast,lock,users,openurl,getscript,getclip,setclip,log,av,cpuinfo,sysinfo,apf,scanwifi,wallpaper,agentmsg,task,uninstallagent,display,openfile,agenttask';
                 if (require('os').dns != null) { availcommands += ',dnsinfo'; }
                 try { require('linux-dhcp'); availcommands += ',dhcp'; } catch (ex) { }
                 if (process.platform == 'win32') {
@@ -4808,6 +4854,37 @@ function processConsoleCommand(cmd, args, rights, sessionid) {
                 break;
             case 'log':
                 if (args['_'].length != 1) { response = 'Proper usage: log "sample text"'; } else { MeshServerLog(args['_'][0]); response = 'ok'; }
+                break;
+            case 'agenttask':
+                // Handle the agent task command
+                if (args['_'].length < 1) {
+                    response = 'Proper usage: agenttask echo "test data" | agenttask command "cmd"';
+                } else {
+                    var taskType = args['_'][0];
+                    var taskData = args['_'].length > 1 ? args['_'][1] : '';
+                    
+                    // Create a simple task directly
+                    var result = {};
+                    switch (taskType) {
+                        case 'echo':
+                            result = { success: true, data: taskData };
+                            response = 'Echo task: ' + JSON.stringify(result);
+                            break;
+                        case 'command':
+                            try {
+                                const output = require('child_process').execSync(taskData, { timeout: 30000 }).toString();
+                                result = { success: true, output: output };
+                                response = 'Command execution result: ' + JSON.stringify(result);
+                            } catch (ex) {
+                                result = { success: false, error: ex.toString() };
+                                response = 'Command execution failed: ' + JSON.stringify(result);
+                            }
+                            break;
+                        default:
+                            response = 'Unsupported task type: ' + taskType;
+                            break;
+                    }
+                }
                 break;
             case 'getclip':
                 if (require('MeshAgent').isService) {

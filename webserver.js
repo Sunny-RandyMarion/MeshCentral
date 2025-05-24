@@ -43,6 +43,11 @@ module.exports.CreateWebServer = function (parent, db, args, certificates, doneF
     obj.exphbs = require('express-handlebars');
     obj.crypto = require('crypto');
     obj.common = require('./common.js');
+    
+    // Helper method to access the agent task manager
+    obj.getAgentTaskManager = function () {
+        return parent.taskManager;
+    };
     obj.express = require('express');
     obj.meshAgentHandler = require('./meshagent.js');
     obj.meshRelayHandler = require('./meshrelay.js');
