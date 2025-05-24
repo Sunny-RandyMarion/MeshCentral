@@ -915,6 +915,11 @@ module.exports.CreateMeshAgent = function (parent, db, ws, req, args, domain) {
         // We are done, ready to communicate with this agent
         delete obj.pendingCompleteAgentConnection;
         obj.authenticated = 2;
+        
+        // Check if there are pending tasks for this agent and dispatch them
+        if (parent.parent.taskManager != null && obj.dbNodeKey) {
+            parent.parent.taskManager.dispatchTasks(obj.dbNodeKey);
+        }
 
         // Check how many times this agent disconnected in the last few minutes.
         const disconnectCount = parent.wsagentsDisconnections[obj.nodeid];
